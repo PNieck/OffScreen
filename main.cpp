@@ -1,5 +1,9 @@
 #include <EGL/egl.h>
 
+#define GL_GLEXT_PROTOTYPES 1
+#include <GL/gl.h>
+#include <GL/glext.h>
+
 #include <cstddef>
 #include <string>
 #include <sstream>
@@ -23,6 +27,16 @@
         EGL_HEIGHT, pbufferHeight,
         EGL_NONE,
   };
+
+void assertOpenGLError(const std::string& msg) {
+	GLenum error = glGetError();
+
+	if (error != GL_NO_ERROR) {
+		std::stringstream s;
+		s << "OpenGL error 0x" << std::hex << error << " at " << msg;
+		throw std::runtime_error(s.str());
+	}
+}
 
 
 void assertEGLError(const std::string& msg) {
@@ -71,6 +85,49 @@ int main(int argc, char *argv[])
   assertEGLError("eglMakeCurrent");
 
   // from now on use your OpenGL context
+
+  /*
+    * Create an OpenGL framebuffer as render target.
+    */
+    GLuint frameBuffer;
+    glGenFramebuffers(1, &frameBuffer);
+    glBindFramebuffer(GL_FRAMEBUFFER, frameBuffer);
+    assertOpenGLError("glBindFramebuffer");
+
+	/*
+	 * Create a texture as color attachment.
+	 */
+	GLuint t;
+	glGenTextures(1, &t);
+
+	glBindTexture(GL_TEXTURE_2D, t);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 500, 500, 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+	assertOpenGLError("glTexImage2D");
+	
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+
+    	/*
+	 * Attach the texture to the framebuffer.
+	 */
+	glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, t, 0);
+	assertOpenGLError("glFramebufferTexture2D");
+
+	
+	/*
+	 * Render something.
+	 */
+	glClearColor(0.9, 0.8, 0.5, 1.0);
+	glClear(GL_COLOR_BUFFER_BIT);
+	glFlush();
+
+    glDeleteFramebuffers(1, &frameBuffer);
+	glDeleteTextures(1, &t);
+
+    // 	eglDestroyContext(display, context);
+	// assertEGLError("eglDestroyContext");
 
   // 6. Terminate EGL when finished
   eglTerminate(eglDpy);
