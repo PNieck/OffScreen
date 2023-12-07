@@ -28,6 +28,28 @@
         EGL_NONE,
   };
 
+  static GLubyte *pixels = NULL;
+
+
+static void screenshot_ppm(const char *filename, unsigned int width,
+        unsigned int height, GLubyte **pixels) {
+    size_t i, j, cur;
+    const size_t format_nchannels = 3;
+    FILE *f = fopen(filename, "w");
+    fprintf(f, "P3\n%d %d\n%d\n", width, height, 255);
+    *pixels = (GLubyte*)realloc((void*)*pixels, format_nchannels * sizeof(GLubyte) * width * height);
+    glReadPixels(0, 0, width, height, GL_RGB, GL_UNSIGNED_BYTE, *pixels);
+    for (i = 0; i < height; i++) {
+        for (j = 0; j < width; j++) {
+            cur = format_nchannels * ((height - i - 1) * width + j);
+            fprintf(f, "%3d %3d %3d ", (*pixels)[cur], (*pixels)[cur + 1], (*pixels)[cur + 2]);
+        }
+        fprintf(f, "\n");
+    }
+    fclose(f);
+}
+
+
 void assertOpenGLError(const std::string& msg) {
 	GLenum error = glGetError();
 
@@ -122,6 +144,8 @@ int main(int argc, char *argv[])
 	glClearColor(0.9, 0.8, 0.5, 1.0);
 	glClear(GL_COLOR_BUFFER_BIT);
 	glFlush();
+
+    screenshot_ppm("result.ppm", 500, 500, &pixels);
 
     glDeleteFramebuffers(1, &frameBuffer);
 	glDeleteTextures(1, &t);
