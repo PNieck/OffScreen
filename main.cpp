@@ -8,6 +8,24 @@
 #include <string>
 #include <sstream>
 #include <stdexcept>
+#include <assert.h>
+#include <iostream>
+
+static GLubyte *pixels = NULL;
+static GLuint fbo;
+static GLuint rbo_color;
+static GLuint rbo_depth;
+static int offscreen = 1;
+static unsigned int max_nframes = 128;
+static unsigned int nframes = 0;
+static unsigned int time0;
+static unsigned int height = 500;
+static unsigned int width = 500;
+
+
+/* Model. */
+static double angle;
+static double delta_angle;
 
   static const EGLint configAttribs[] = {
           EGL_SURFACE_TYPE, EGL_PBUFFER_BIT,
@@ -28,8 +46,6 @@
         EGL_NONE,
   };
 
-  static GLubyte *pixels = NULL;
-
 
 static void screenshot_ppm(const char *filename, unsigned int width,
         unsigned int height, GLubyte **pixels) {
@@ -47,6 +63,76 @@ static void screenshot_ppm(const char *filename, unsigned int width,
         fprintf(f, "\n");
     }
     fclose(f);
+}
+
+static void model_init(void) {
+    angle = 0;
+    delta_angle = 1;
+}
+
+static int model_update(void) {
+    angle += delta_angle;
+    return 0;
+}
+
+static int model_finished(void) {
+    return nframes >= max_nframes;
+}
+
+static void draw_scene(void) {
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glLoadIdentity();
+    glRotatef(angle, 0.0f, 0.0f, -1.0f);
+    glBegin(GL_TRIANGLES);
+    glColor3f(1.0f, 0.0f, 0.0f);
+    glVertex3f( 0.0f,  0.5f, 0.0f);
+    glColor3f(0.0f, 1.0f, 0.0f);
+    glVertex3f(-0.5f, -0.5f, 0.0f);
+    glColor3f(0.0f, 0.0f, 1.0f);
+    glVertex3f( 0.5f, -0.5f, 0.0f);
+    glEnd();
+}
+
+
+static void init(void)  {
+    int glget;
+
+    /*  Framebuffer */
+    glGenFramebuffers(1, &fbo);
+    glBindFramebuffer(GL_FRAMEBUFFER, fbo);
+
+    /* Color renderbuffer. */
+    glGenRenderbuffers(1, &rbo_color);
+    glBindRenderbuffer(GL_RENDERBUFFER, rbo_color);
+    /* Storage must be one of: */
+    /* GL_RGBA4, GL_RGB565, GL_RGB5_A1, GL_DEPTH_COMPONENT16, GL_STENCIL_INDEX8. */
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_RGB565, width, height);
+    glFramebufferRenderbuffer(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, rbo_color);
+
+    /* Depth renderbuffer. */
+    glGenRenderbuffers(1, &rbo_depth);
+    glBindRenderbuffer(GL_RENDERBUFFER, rbo_depth);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT16, width, height);
+    glFramebufferRenderbuffer(GL_DRAW_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, rbo_depth);
+
+    glReadBuffer(GL_COLOR_ATTACHMENT0);
+
+    /* Sanity check. */
+    assert(glCheckFramebufferStatus(GL_FRAMEBUFFER));
+    glGetIntegerv(GL_MAX_RENDERBUFFER_SIZE, &glget);
+    assert(width < (unsigned int)glget);
+    assert(height < (unsigned int)glget);
+
+    glClearColor(0.0, 0.0, 0.0, 0.0);
+    glEnable(GL_DEPTH_TEST);
+    glPixelStorei(GL_PACK_ALIGNMENT, 1);
+    glViewport(0, 0, width, height);
+    glMatrixMode(GL_PROJECTION);
+    glLoadIdentity();
+    glMatrixMode(GL_MODELVIEW);
+
+    time0 += 2;
+    model_init();
 }
 
 
@@ -141,17 +227,20 @@ int main(int argc, char *argv[])
 	/*
 	 * Render something.
 	 */
-	glClearColor(0.9, 0.8, 0.5, 1.0);
-	glClear(GL_COLOR_BUFFER_BIT);
-	glFlush();
+	// glClearColor(0.9, 0.8, 0.5, 1.0);
+	// glClear(GL_COLOR_BUFFER_BIT);
 
-    screenshot_ppm("result.ppm", 500, 500, &pixels);
+  init();
+  model_init();
+  draw_scene();
+  glFlush();
+  screenshot_ppm("result.ppm", width, height, &pixels);
 
-    glDeleteFramebuffers(1, &frameBuffer);
+  glDeleteFramebuffers(1, &frameBuffer);
 	glDeleteTextures(1, &t);
 
-    // 	eglDestroyContext(display, context);
-	// assertEGLError("eglDestroyContext");
+// 	eglDestroyContext(display, context);
+// assertEGLError("eglDestroyContext");
 
   // 6. Terminate EGL when finished
   eglTerminate(eglDpy);
